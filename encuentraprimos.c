@@ -69,126 +69,134 @@ int main(int argc, char* argv[])
     char info[LONGITUD_MSG_ERR];
     FILE *fsal, *fc;
     int numhijos;
+	int numprimos = 0; // Variable para contar el numero de primos encontrados
 
     // Control de entrada, después del nombre del script debe figurar el número de hijos y el parámetro verbosity
 
-    numhijos = 4;     // SOLO para el esqueleto, en el proceso  definitivo vendrá por la entrada
+    numhijos = atoi(argv[1]);
+	verbosity = atoi(argv[2]);
 
     pid=fork();       // Creación del SERVER
     
-    if (pid == 0)     // Rama del hijo de RAIZ (SERVER)
-    {
+    if (pid == 0) { // Rama del hijo de RAIZ (SERVER)
+
 		pid = getpid();
 		pidservidor = pid;
 		mypid = pidservidor;	   
 		
 		// Petición de clave para crear la cola
 		if ( ( key = ftok( "/tmp", 'C' ) ) == -1 ) {
-		  perror( "Fallo al pedir ftok" );
-		  exit( 1 );
+			perror( "Fallo al pedir ftok" );
+			exit( 1 );
 		}
 		
 		printf( "Server: System V IPC key = %u\n", key );
 
         // Creación de la cola de mensajería
 		if ( ( msgid = msgget( key, IPC_CREAT | 0666 ) ) == -1 ) {
-		  perror( "Fallo al crear la cola de mensajes" );
-		  exit( 2 );
+			perror( "Fallo al crear la cola de mensajes" );
+			exit( 2 );
 		}
 		printf("Server: Message queue id = %u\n", msgid );
 
         i = 0;
         // Creación de los procesos CALCuladores
 		while(i < numhijos) {
-		 if (pid > 0) { // Solo SERVER creará hijos
-			 pid=fork(); 
-			 if (pid == 0) 
-			   {   // Rama hijo
-				parentpid = getppid();
-				mypid = getpid();
-			   }
-			 }
-		 i++;  // Número de hijos creados
+			if(pid > 0) { // Solo SERVER creará hijos
+				pid=fork(); 
+				if (pid == 0) {   // Rama hijo
+					parentpid = getppid();
+					mypid = getpid();
+				}
+			}
+		i++;  // Número de hijos creados
 		}
 
         // AQUI VA LA LOGICA DE NEGOCIO DE CADA CALCulador. 
-		if (mypid != pidservidor)
-		{
+		if (mypid != pidservidor) {
+
 			message.mesg_type = COD_ESTOY_AQUI;
 			sprintf(message.mesg_text,"%d",mypid);
 			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
 		
 			// Un montón de código por escribir
-			//Recivir principio y fin de búsqueda de primos
+			//Recibir principio y fin de búsqueda de primos
 			msgrcv(msgid, &message, sizeof(message), COD_LIMITES, 0);
 			sscanf(message.mesg_text,"%ld %d",&nbase, &intervalo);
 			sleep(1);
 			//Búsqueda de los números primos
-			for (numero=nbase;numero<nbase+intervalo;numero++){
+			for (numero = nbase; numero < nbase+intervalo; numero++) {
 				if (Comprobarsiesprimo(numero)){
 					message.mesg_type = COD_RESULTADOS;
 					sprintf(message.mesg_text,"%d:  %ld", mypid, numero);
-					msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
+					msgsnd(msgid, &message, sizeof(message), IPC_NOWAIT);
 				}
 			}
 			//Envío del mensaje de fin de búsqueda
 			message.mesg_type = COD_FIN;
 			sprintf(message.mesg_text,"%d", mypid);
 			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
-			
 
 			exit(0);
-		}
 		
-		// SERVER
-		
-		else
-		{ 
-		  // Pide memoria dinámica para crear la lista de pids de los hijos CALCuladores
-		  pidhijos = (int*)malloc(numhijos*sizeof(int));
-		  //Recepción de los mensajes COD_ESTOY_AQUI de los hijos
-		  for (j=0; j <numhijos; j++)
-		  {
-			  msgrcv(msgid, &message, sizeof(message), 0, 0);
-			  sscanf(message.mesg_text,"%d",&pid); // Tendrás que guardar esa pid
-			  *(pidhijos+j) = pid;
-			  printf("\nMe ha enviado un mensaje el hijo %d\n",pid);
-		  }
-		  // Mucho código con la lógica de negocio de SERVER
-		  //Imprimir Jerarquía
-		  pidraiz = getppid();
-		  Imprimirjerarquiaproc(pidraiz, pidservidor, pidhijos, numhijos);
-		  //Enviar principio y fin de búsqueda de primos
-		  intervalo = RANGO/numhijos;
-		  nbase = BASE;
-		  for (j=0; j <numhijos; j++){
-			  message.mesg_type = COD_LIMITES;
-			  sprintf(message.mesg_text,"%ld %d", nbase, intervalo);
-			  msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
-			  nbase = nbase+intervalo;
-		  }
-		  //Recibir e imprimir los números primos
-		  nfin = 0;
-		  while(nfin<numhijos){
-			  msgrcv(msgid, &message, sizeof(message), COD_RESULTADOS, 0);
-			  Informar(message.mesg_text, 1);
-			  sscanf(message.mesg_text,"%ld",&numprimrec);
-			  if(msgrcv(msgid, &message, sizeof(message), COD_FIN, 0)){
-				  nfin++;
-				  
-			  }
-		  }
-		  
-		  // Borrar la cola de mensajería, muy importante. No olvides cerrar los ficheros
-		  msgctl(msgid,IPC_RMID,NULL);
-		  
-	   }
-    }
+		} else { // SERVER
 
-    // Rama de RAIZ, proceso primigenio
-    
-    else
-    {
+			// Pide memoria dinámica para crear la lista de pids de los hijos CALCuladores
+			pidhijos = (int*)malloc(numhijos*sizeof(int));
+			time(tstart);
+			//Recepción de los mensajes COD_ESTOY_AQUI de los hijos
+			for (j = 0; j < numhijos; j++) {
+				msgrcv(msgid, &message, sizeof(message), 0, 0);
+				sscanf(message.mesg_text,"%d",&pid); // Tendrás que guardar esa pid
+				*(pidhijos+j) = pid;
+				printf("\nMe ha enviado un mensaje el hijo %d\n",pid);
+			}
+			// Mucho código con la lógica de negocio de SERVER
+			//Imprimir Jerarquía
+			pidraiz = getppid();
+			Imprimirjerarquiaproc(pidraiz, pidservidor, pidhijos, numhijos);
+
+			//Enviar principio y fin de búsqueda de primos
+			intervalo = RANGO/numhijos;
+			nbase = BASE;
+			for (j = 0; j < numhijos; j++) {
+				message.mesg_type = COD_LIMITES;
+				sprintf(message.mesg_text,"%ld %d", nbase, intervalo);
+				msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
+				nbase = nbase+intervalo;
+			}
+
+			//Recibir e imprimir los números primos
+			fsal = fopen(NOMBRE_FICH, "w");
+			fc = fopen(NOMBRE_FICH_CUENTA, "w");
+			nfin = 0;
+			while(nfin < numhijos) {
+				if(msgrcv(msgid, &message, sizeof(message), 0, 0)) {
+					if(message.mesg_type == COD_RESULTADOS) {
+						Informar(message.mesg_text, verbosity);
+						sscanf(message.mesg_text,"%d:  %ld", &pid, &numprimrec);
+						fprintf(fsal, "%ld\n", numprimrec);
+						numprimos++;
+						if(numprimos%CADA_CUANTOS_ESCRIBO == 0 && numprimos != 0) {
+							fprintf(fc, "%d\n", numprimos);
+						}
+					}
+					else if(message.mesg_type == COD_FIN) {
+						nfin++;
+						printf("El proceso %s ha terminado\n", message.mesg_text);
+					}
+				}
+				
+			}
+			fclose(fsal);
+			fclose(fc);
+			printf("Calculos terminados\n");
+			time(tend);
+			// Borrar la cola de mensajería, muy importante. No olvides cerrar los ficheros
+			msgctl(msgid, IPC_RMID, NULL);
+	   	}
+
+    } else { // Rama de RAIZ, proceso primigenio
 	  
       alarm(INTERVALO_TIMER);
       signal(SIGALRM, alarmHandler);
@@ -201,15 +209,14 @@ int main(int argc, char* argv[])
 }
 
 // Manejador de la alarma en el RAIZ
-static void alarmHandler(int signo)
-{
+static void alarmHandler(int signo) {
 //...
     printf("SOLO PARA EL ESQUELETO... Han pasado 5 segundos\n");
     alarm(INTERVALO_TIMER);
 
 }
 
-void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhijos){
+void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhijos) {
 	printf("Raiz\tServ\tCalc\n");
 	printf("%d\t%d\t%d\t\n", pidraiz, pidservidor, *pidhijos);
 	for(int i=1; i<numhijos; i++){
@@ -225,7 +232,7 @@ int Comprobarsiesprimo(long int numero) {
   return 1;
 }
 
-void Informar(char *texto, int verboso){
+void Informar(char *texto, int verboso) {
 	if(verboso){
 		printf("%s\n", texto);
 	}
