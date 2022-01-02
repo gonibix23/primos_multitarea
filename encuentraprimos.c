@@ -75,6 +75,7 @@ int main(int argc, char* argv[])
 
     numhijos = atoi(argv[1]);
 	verbosity = atoi(argv[2]);
+	fc = fopen(NOMBRE_FICH_CUENTA, "w+");
 
     pid=fork();       // Creación del SERVER
     
@@ -168,7 +169,6 @@ int main(int argc, char* argv[])
 
 			//Recibir e imprimir los números primos
 			fsal = fopen(NOMBRE_FICH, "w");
-			fc = fopen(NOMBRE_FICH_CUENTA, "w");
 			nfin = 0;
 			while(nfin < numhijos) {
 				if(msgrcv(msgid, &message, sizeof(message), 0, 0)) {
@@ -178,6 +178,7 @@ int main(int argc, char* argv[])
 						fprintf(fsal, "%ld\n", numprimrec);
 						numprimos++;
 						if(numprimos%CADA_CUANTOS_ESCRIBO == 0 && numprimos != 0) {
+							freopen(NULL,"w+",fc);
 							fprintf(fc, "%d\n", numprimos);
 						}
 					}
@@ -188,32 +189,31 @@ int main(int argc, char* argv[])
 				}
 				
 			}
+			printf("Calculos terminados\n");
 			fclose(fsal);
 			fclose(fc);
-			printf("Calculos terminados\n");
 			time(tend);
-			// Borrar la cola de mensajería, muy importante. No olvides cerrar los ficheros
-			msgctl(msgid, IPC_RMID, NULL);
+			msgctl(msgid, IPC_RMID, NULL); // Borrar la cola de mensajería, muy importante
 	   	}
 
     } else { // Rama de RAIZ, proceso primigenio
 	  
-      alarm(INTERVALO_TIMER);
-      signal(SIGALRM, alarmHandler);
-      for (;;)    // Solo para el esqueleto
-		sleep(1); // Solo para el esqueleto
-	  // Espera del final de SERVER
-      // ...
-      // El final de todo
+		alarm(INTERVALO_TIMER);
+		int cuentaLineas;
+		fscanf(fc, "%d", &cuentaLineas);
+		printf("%d", cuentaLineas);
+		signal(SIGALRM, alarmHandler);
+		for (;;)    // Solo para el esqueleto
+			sleep(1); // Solo para el esqueleto
+		// Espera del final de SERVER
+		// ...
+		// El final de todo
     }
 }
 
 // Manejador de la alarma en el RAIZ
 static void alarmHandler(int signo) {
-//...
-    printf("SOLO PARA EL ESQUELETO... Han pasado 5 segundos\n");
     alarm(INTERVALO_TIMER);
-
 }
 
 void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhijos) {
