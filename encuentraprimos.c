@@ -47,8 +47,6 @@ void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhi
 int ContarLineas();
 static void alarmHandler(int signo);
 
-int cuentasegs;                   // Variable para el cómputo del tiempo total
-
 int main(int argc, char* argv[])
 {
 	int i,j;
@@ -75,7 +73,6 @@ int main(int argc, char* argv[])
 
     numhijos = atoi(argv[1]);
 	verbosity = atoi(argv[2]);
-	fc = fopen(NOMBRE_FICH_CUENTA, "w+");
 
     pid=fork();       // Creación del SERVER
     
@@ -144,13 +141,12 @@ int main(int argc, char* argv[])
 
 			// Pide memoria dinámica para crear la lista de pids de los hijos CALCuladores
 			pidhijos = (int*)malloc(numhijos*sizeof(int));
-			time(tstart);
+			time(&tstart);
 			//Recepción de los mensajes COD_ESTOY_AQUI de los hijos
 			for (j = 0; j < numhijos; j++) {
 				msgrcv(msgid, &message, sizeof(message), 0, 0);
 				sscanf(message.mesg_text,"%d",&pid); // Tendrás que guardar esa pid
 				*(pidhijos+j) = pid;
-				printf("\nMe ha enviado un mensaje el hijo %d\n",pid);
 			}
 			// Mucho código con la lógica de negocio de SERVER
 			//Imprimir Jerarquía
@@ -178,8 +174,9 @@ int main(int argc, char* argv[])
 						fprintf(fsal, "%ld\n", numprimrec);
 						numprimos++;
 						if(numprimos%CADA_CUANTOS_ESCRIBO == 0 && numprimos != 0) {
-							freopen(NULL,"w+",fc);
+							fc = fopen(NOMBRE_FICH_CUENTA, "w");
 							fprintf(fc, "%d\n", numprimos);
+							fclose(fc);
 						}
 					}
 					else if(message.mesg_type == COD_FIN) {
@@ -189,31 +186,33 @@ int main(int argc, char* argv[])
 				}
 				
 			}
-			printf("Calculos terminados\n");
 			fclose(fsal);
-			fclose(fc);
-			time(tend);
+			printf("Calculos terminados\n");
+			time(&tend);
+			printf("Números encontrados: %d.\n", numprimos);
+			printf("Tiempo total del calculo: %.2f segundos.\n", difftime(tend, tstart));
 			msgctl(msgid, IPC_RMID, NULL); // Borrar la cola de mensajería, muy importante
 	   	}
 
     } else { // Rama de RAIZ, proceso primigenio
-	  
 		alarm(INTERVALO_TIMER);
-		int cuentaLineas;
-		fscanf(fc, "%d", &cuentaLineas);
-		printf("%d", cuentaLineas);
 		signal(SIGALRM, alarmHandler);
-		for (;;)    // Solo para el esqueleto
-			sleep(1); // Solo para el esqueleto
-		// Espera del final de SERVER
-		// ...
-		// El final de todo
+		wait(NULL);
+		free(pidhijos);
+		
     }
 }
 
 // Manejador de la alarma en el RAIZ
 static void alarmHandler(int signo) {
-    alarm(INTERVALO_TIMER);
+	FILE *fc = fopen(NOMBRE_FICH_CUENTA, "r");
+	if(fc){
+		int cuentaLineas;
+		fscanf(fc, "%d", &cuentaLineas);
+		printf("%d\n", cuentaLineas);
+		fclose(fc);
+	}
+	alarm(INTERVALO_TIMER);
 }
 
 void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhijos) {
